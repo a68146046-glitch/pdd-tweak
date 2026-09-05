@@ -26,20 +26,18 @@ jobs:
             || sudo apt-get install -y ldid || echo "警告: ldid 不可用,make 会失败"
           echo "THEOS=$THEOS" >> "$GITHUB_ENV"
 
-      - name: 下载 iOS SDK(git sparse-checkout + checkout-index)
+      - name: 下载 iOS SDK(git sparse-checkout v5)
         run: |
           export THEOS="$THEOS"
           mkdir -p "$HOME/sdks-src"
           cd "$HOME/sdks-src"
           rm -rf sdks
-          git clone --depth=1 --filter=blob:none --sparse --no-checkout \
+          git clone --depth=1 --filter=blob:none --sparse \
             https://github.com/theos/sdks.git
           cd sdks
-          git sparse-checkout init --cone
           git sparse-checkout set iPhoneOS16.0.sdk
-          git checkout-index --force --all
           echo "===== ls iPhoneOS16.0.sdk/ ====="
-          ls iPhoneOS16.0.sdk/ | head -5
+          ls iPhoneOS16.0.sdk/ | head -10 || { echo "!! sparse-checkout 仍没拿到目录"; exit 1; }
           mkdir -p "$THEOS/sdks"
           mv iPhoneOS16.0.sdk "$THEOS/sdks/"
           echo "===== SDK 准备完毕 ====="
