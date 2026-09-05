@@ -21,34 +21,33 @@ jobs:
           export THEOS="$HOME/theos"
           git clone --depth 1 --recursive https://github.com/theos/theos.git "$THEOS" || exit 1
           curl -fsSL -o /tmp/ldid \
-            https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64 && \
-            sudo mv /tmp/ldid /usr/local/bin/ldid && sudo chmod +x /usr/local/bin/ldid || \
-            echo "警告: ldid 下载失败(将尝试 apt 替代)"
-          which ldid || sudo apt-get install -y ldid || echo "警告: ldid 不可用"
+            https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64 \
+            && sudo mv /tmp/ldid /usr/local/bin/ldid && sudo chmod +x /usr/local/bin/ldid \
+            || sudo apt-get install -y ldid || echo "警告: ldid 不可用,make 会失败"
           echo "THEOS=$THEOS" >> "$GITHUB_ENV"
 
-      - name: 下载 iOS SDK(多源尝试)
+      - name: 下载 iOS SDK(git sparse-checkout)
         run: |
           export THEOS="$THEOS"
+          mkdir -p "$HOME/sdks-src"
+          cd "$HOME/sdks-src"
+          rm -rf sdks
+          git clone --depth=1 --filter=blob:none --no-checkout \
+            https://github.com/theos/sdks.git
+          cd sdks
+          git sparse-checkout init --cone
+          git sparse-checkout set iPhoneOS16.0.sdk
+          git checkout
           mkdir -p "$THEOS/sdks"
-          ok=""
-          for url in \
-            "https://github.com/theos/sdks/releases/download/iPhoneOS16.5.sdk/iPhoneOS16.5.sdk.zip" \
-            "https://github.com/theos/sdks/releases/download/iPhoneOS16.0.sdk/iPhoneOS16.0.sdk.zip" \
-            "https://github.com/theos/sdks/releases/download/iPhoneOS17.0.sdk/iPhoneOS17.0.sdk.zip" ; do
-            echo ">>> 尝试下载: $url"
-            if curl -fsSL --retry 2 --connect-timeout 30 -o /tmp/sdk.zip "$url"; then
-              echo ">>> 下载成功: $url"; ok=1; break
-            fi
-          done
-          if [ -z "$ok" ]; then echo "!! 全部 SDK 下载源失败"; exit 1; fi
-          unzip -q /tmp/sdk.zip -d "$THEOS/sdks" || { echo "!! SDK 解压失败"; exit 1; }
+          mv iPhoneOS16.0.sdk "$THEOS/sdks/"
+          echo "===== SDK 准备完毕 ====="
           ls "$THEOS/sdks"
 
       - name: 编译 .deb
         run: |
           export THEOS="$THEOS"
-          make clean package FINALPACKAGE=1 2>&1 | tail -100
+          which ldid && ldid -h 2>&1 | head -3 || echo "警告: 无 ldid"
+          make clean package FINALPACKAGE=1 2>&1 | tail -120
           echo "===== 产物 ====="
           ls -la packages/ || echo "!! packages 目录为空,见上方错误"
 
