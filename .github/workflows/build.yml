@@ -1,0 +1,61 @@
+name: Build PddDump
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang fakeroot perl gnupg xz-utils unzip zip git
+
+      - name: 准备 Theos 与 ldid
+        run: |
+          export THEOS="$HOME/theos"
+          git clone --depth 1 --recursive https://github.com/theos/theos.git "$THEOS" || exit 1
+          curl -fsSL -o /tmp/ldid \
+            https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64 \
+            && sudo mv /tmp/ldid /usr/local/bin/ldid && sudo chmod +x /usr/local/bin/ldid \
+            || sudo apt-get install -y ldid || echo "警告: ldid 不可用,make 会失败"
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+
+      - name: 下载 iOS SDK(git sparse-checkout + checkout-index)
+        run: |
+          export THEOS="$THEOS"
+          mkdir -p "$HOME/sdks-src"
+          cd "$HOME/sdks-src"
+          rm -rf sdks
+          git clone --depth=1 --filter=blob:none --sparse --no-checkout \
+            https://github.com/theos/sdks.git
+          cd sdks
+          git sparse-checkout init --cone
+          git sparse-checkout set iPhoneOS16.0.sdk
+          git checkout-index --force --all
+          echo "===== ls iPhoneOS16.0.sdk/ ====="
+          ls iPhoneOS16.0.sdk/ | head -5
+          mkdir -p "$THEOS/sdks"
+          mv iPhoneOS16.0.sdk "$THEOS/sdks/"
+          echo "===== SDK 准备完毕 ====="
+          ls "$THEOS/sdks"
+
+      - name: 编译 .deb
+        run: |
+          export THEOS="$THEOS"
+          which ldid && ldid -h 2>&1 | head -3 || echo "警告: 无 ldid"
+          make clean package FINALPACKAGE=1 2>&1 | tail -120
+          echo "===== 产物 ====="
+          ls -la packages/ || echo "!! packages 目录为空,见上方错误"
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: PddDump-deb
+          path: packages/*.deb
+          if-no-files-found: error
