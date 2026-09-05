@@ -1,0 +1,9 @@
+Package: com.monitor.pdddump
+Name: PddDump
+Version: 0.3.0-1
+Architecture: iphoneos-arm64
+Description: Auto-capture Pinduoduo goods detail data to JSON (/var/mobile/Documents/PddDump)
+Maintainer: pdd-monitor
+Author: pdd-monitor
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 15.0)
