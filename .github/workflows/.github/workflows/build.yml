@@ -1,1 +1,40 @@
+name: Build PddDump
 
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang ldid fakeroot perl gnupg xz-utils unzip zip git
+
+      - name: 准备 Theos
+        run: |
+          export THEOS="$HOME/theos"
+          git clone --depth 1 --recursive https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/sdks"
+          echo ">>> 下载 iPhoneOS16.0.sdk,可能需要几分钟..."
+          curl -sL -o /tmp/sdk.zip \
+            https://github.com/theos/sdks/releases/download/iPhoneOS16.0.sdk/iPhoneOS16.0.sdk.zip
+          unzip -q /tmp/sdk.zip -d "$THEOS/sdks"
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+
+      - name: 编译 .deb
+        run: |
+          export THEOS="$THEOS"
+          make clean package FINALPACKAGE=1
+          ls -la packages/
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: PddDump-deb
+          path: packages/*.deb
