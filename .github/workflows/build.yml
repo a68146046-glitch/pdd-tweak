@@ -8,7 +8,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+ - uses: actions/checkout@v4
 
       - name: 安装构建依赖
         run: |
@@ -26,22 +26,23 @@ jobs:
             || sudo apt-get install -y ldid || echo "警告: ldid 不可用,make 会失败"
           echo "THEOS=$THEOS" >> "$GITHUB_ENV"
 
-      - name: 下载 iOS SDK(git sparse-checkout v5)
+      - name: 下载 iOS SDK(actions/checkout sparse)
+        uses: actions/checkout@v4
+        with:
+          repository: theos/sdks
+          ref: main
+          path: sdks-repo
+          sparse-checkout: iPhoneOS16.0.sdk
+          fetch-depth: 1
+
+      - name: 移动 SDK 到 Theos 目录
         run: |
-          export THEOS="$THEOS"
-          mkdir -p "$HOME/sdks-src"
-          cd "$HOME/sdks-src"
-          rm -rf sdks
-          git clone --depth=1 --filter=blob:none --sparse \
-            https://github.com/theos/sdks.git
-          cd sdks
-          git sparse-checkout set iPhoneOS16.0.sdk
-          echo "===== ls iPhoneOS16.0.sdk/ ====="
-          ls iPhoneOS16.0.sdk/ | head -10 || { echo "!! sparse-checkout 仍没拿到目录"; exit 1; }
+          export THEOS="$HOME/theos"
           mkdir -p "$THEOS/sdks"
-          mv iPhoneOS16.0.sdk "$THEOS/sdks/"
+          mv sdks-repo/iPhoneOS16.0.sdk "$THEOS/sdks/"
           echo "===== SDK 准备完毕 ====="
           ls "$THEOS/sdks"
+          ls "$THEOS/sdks/iPhoneOS16.0.sdk" | head -5
 
       - name: 编译 .deb
         run: |
