@@ -1,1 +1,66 @@
+# PddDumpTweak 编译工作流(GitHub Actions 云编译,无需 Mac)
+# 用法:把本工程推到 GitHub(私有库即可),进入 Actions 页手动运行 "Build PddDump",
+#       完成后在运行记录底部 Artifacts 下载 .deb。
+# v2:SDK 多源 fallback + ldid 下载 + 编译错误回显(失败日志更友好)
 
+name: Build PddDump
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang fakeroot perl gnupg xz-utils unzip zip git
+
+      - name: 准备 Theos 与 ldid
+        run: |
+          export THEOS="$HOME/theos"
+          git clone --depth 1 --recursive https://github.com/theos/theos.git "$THEOS" || exit 1
+          # ldid(代码签名,ubuntu 仓库没有,从 Procursus 官方 release 下载 Linux 版)
+          curl -fsSL -o /tmp/ldid \
+            https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64 && \
+            sudo mv /tmp/ldid /usr/local/bin/ldid && sudo chmod +x /usr/local/bin/ldid || \
+            echo "警告: ldid 下载失败(将尝试 apt 替代)"
+          which ldid || sudo apt-get install -y ldid || echo "警告: ldid 不可用"
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+
+      - name: 下载 iOS SDK(多源尝试)
+        run: |
+          export THEOS="$THEOS"
+          mkdir -p "$THEOS/sdks"
+          ok=""
+          for url in \
+            "https://github.com/theos/sdks/releases/download/iPhoneOS16.5.sdk/iPhoneOS16.5.sdk.zip" \
+            "https://github.com/theos/sdks/releases/download/iPhoneOS16.0.sdk/iPhoneOS16.0.sdk.zip" \
+            "https://github.com/theos/sdks/releases/download/iPhoneOS17.0.sdk/iPhoneOS17.0.sdk.zip" ; do
+            echo ">>> 尝试下载: $url"
+            if curl -fsSL --retry 2 --connect-timeout 30 -o /tmp/sdk.zip "$url"; then
+              echo ">>> 下载成功: $url"; ok=1; break
+            fi
+          done
+          if [ -z "$ok" ]; then echo "!! 全部 SDK 下载源失败"; exit 1; fi
+          unzip -q /tmp/sdk.zip -d "$THEOS/sdks" || { echo "!! SDK 解压失败"; exit 1; }
+          ls "$THEOS/sdks"
+
+      - name: 编译 .deb
+        run: |
+          export THEOS="$THEOS"
+          make clean package FINALPACKAGE=1 2>&1 | tail -100
+          echo "===== 产物 ====="
+          ls -la packages/ || echo "!! packages 目录为空,见上方错误"
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: PddDump-deb
+          path: packages/*.deb
+          if-no-files-found: error
